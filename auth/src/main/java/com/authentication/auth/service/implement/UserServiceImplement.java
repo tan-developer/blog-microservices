@@ -1,6 +1,7 @@
 package com.authentication.auth.service.implement;
 
 import com.authentication.auth.dto.CreateUserDTO;
+import com.authentication.auth.dto.LoginCredentialDto;
 import com.authentication.auth.dto.TokenDto;
 import com.authentication.auth.entity.user.PasswordEntity;
 import com.authentication.auth.entity.user.UserEntity;
@@ -11,6 +12,7 @@ import com.authentication.auth.repository.UserEntityRepository;
 import com.authentication.auth.service.UserService;
 import com.authentication.auth.utils.PasswordUtils;
 import jakarta.transaction.Transactional;
+import org.springframework.security.core.parameters.P;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
@@ -65,7 +67,7 @@ public class UserServiceImplement implements UserService {
 
         UserEntity userOnCommit = this.userEntityRepository.save(userEntity);
 
-        TokenDto tokenDto = jwtService.generateToken(userOnCommit.getUsername());
+        TokenDto tokenDto = jwtService.generateToken(userOnCommit);
         jwtService.addTokenCookies(tokenDto);
 
         return userOnCommit;
@@ -104,5 +106,34 @@ public class UserServiceImplement implements UserService {
     @Override
     public UserEntity getUsers() {
         return null;
+    }
+
+    @Override
+    public String loginCredentials(LoginCredentialDto payload) {
+        UserEntity user = this.userEntityRepository.findByEmail(payload.getEmail())
+                .orElseThrow(() -> new BusinessException(BusinessCode.USERNAME_NOT_FOUND));
+
+        if (!user.isStatus()) {
+            throw new BusinessException(BusinessCode.USER_INACTIVE);
+        }
+
+        PasswordEntity passwordEntity = user.getPasswordEntity();
+
+        boolean isMatchesPassword = passwordUtils.comparePasswords(payload.getPassword(), passwordEntity.getHashedPassword());
+
+        if (isMatchesPassword) {
+            TokenDto tokenDto = jwtService.generateToken(user);
+            jwtService.addTokenCookies(tokenDto);
+
+            return "Login successfully";
+        }else {
+            throw new BusinessException(BusinessCode.INVALID_CREDENTIALS);
+        }
+
+    }
+
+    @Override
+    public void logout() {
+
     }
 }

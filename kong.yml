@@ -2,18 +2,28 @@ _format_version: "2.1"
 _transform: true
 
 services:
-  - name: example-service
-    url: http://example.com
+  - name: authentication-service
+    url: http://host.docker.internal:8080
     routes:
-      - name: example-route
+      - name: auth-route
         paths:
-          - /example
+          - /authentication
+        strip_path: true
+        plugins:
+          - name: jwt
+            config:
+              secret_is_base64: false
+              key_claim_name: kid
+              claims_to_verify:
+                - exp
+      - name: public-route
+        paths:
+          - /public
         strip_path: true
 
-  - name: mock-service
-    url: http://mockbin.org
-    routes:
-      - name: mock-route
-        paths:
-          - /mock
-        strip_path: true
+consumers:
+  - username: api-user
+    jwt_secrets:
+      - key: "404E635266556A586E3272357538782"
+        algorithm: HS256
+        secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"

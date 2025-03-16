@@ -1,11 +1,12 @@
 package com.authentication.auth.service;
 
 import com.authentication.auth.dto.TokenDto;
+import com.authentication.auth.entity.user.UserEntity;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 public interface JwtService {
-    TokenDto generateToken(String username);
+    TokenDto generateToken(UserEntity username);
 
     TokenDto refreshToken(String refreshToken);
 

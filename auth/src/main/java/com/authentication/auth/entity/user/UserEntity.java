@@ -2,6 +2,7 @@ package com.authentication.auth.entity.user;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -12,6 +13,7 @@ import java.util.Date;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class UserEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -41,6 +43,6 @@ public class UserEntity {
 
     private Date dateOfBirth;
 
-    @ManyToOne(targetEntity = PasswordEntity.class)
+    @ManyToOne(targetEntity = PasswordEntity.class , fetch = FetchType.LAZY)
     private PasswordEntity passwordEntity;
 }

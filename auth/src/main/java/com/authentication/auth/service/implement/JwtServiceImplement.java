@@ -1,6 +1,9 @@
 package com.authentication.auth.service.implement;
 
 import com.authentication.auth.dto.TokenDto;
+import com.authentication.auth.entity.user.UserEntity;
+import com.authentication.auth.exception.BusinessCode;
+import com.authentication.auth.exception.BusinessException;
 import com.authentication.auth.service.JwtService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -22,6 +25,7 @@ import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 
 @Service
@@ -55,14 +59,17 @@ public class JwtServiceImplement implements JwtService {
     @Value("${application.security.jwt.cookie.path:/}")
     private String path;
 
+    @Value("${application.security.jwt.kid:key}")
+    private String kid;
+
     @Override
-    public TokenDto generateToken(String username) {
+    public TokenDto generateToken(UserEntity user) {
         Map<String, Object> claims = new HashMap<>();
 
-        String accessToken = createToken(claims, username, jwtExpiration);
+        String accessToken = createToken(claims, user, jwtExpiration);
 
         claims.put("token_type", "refresh");
-        String refreshToken = createToken(claims, username, refreshExpiration);
+        String refreshToken = createToken(claims, user, refreshExpiration);
 
         return TokenDto.builder()
                 .accessToken(accessToken)
@@ -76,16 +83,31 @@ public class JwtServiceImplement implements JwtService {
             Claims claims = extractAllClaims(refreshToken);
             String tokenType = claims.get("token_type", String.class);
 
-            if (!"refresh".equals(tokenType)) {
+
+            if (!"refesh".equals(tokenType)) {
                 throw new RuntimeException("Invalid refresh token");
             }
 
-            String username = getUsernameFromToken(refreshToken);
+            TokenDto tokenDto = getTokenFromCookies().orElseThrow(() -> new BusinessException(BusinessCode.UNAUTH));
 
-            return generateToken(username);
+
+            String username = getUsernameFromToken(tokenDto.getAccessToken());
+
+            Claims claimsAccessToken = extractAllClaims(tokenDto.getAccessToken());
+
+            UserEntity user = UserEntity.builder()
+                    .userId(claimsAccessToken.get("userId", String.class))
+                    .username(username)
+                    .email(claimsAccessToken.get("email", String.class))
+                    .firstName(claimsAccessToken.get("firstName", String.class))
+                    .lastName(claimsAccessToken.get("lastName", String.class))
+                    .build();
+
+
+            return generateToken(user);
 
         } catch (ExpiredJwtException ex) {
-            throw new RuntimeException("Refresh token expired");
+            throw new BusinessException(BusinessCode.REFRESH_EXPRIED);
         } catch (Exception e) {
             throw new RuntimeException("Invalid refresh token: " + e.getMessage());
         }
@@ -105,15 +127,7 @@ public class JwtServiceImplement implements JwtService {
         }
     }
 
-    @Override
-    public String getUsernameFromToken(String token) {
-        return extractClaim(token, Claims::getSubject);
-    }
 
-    @Override
-    public String getEmailFromToken(String token) {
-        return extractClaim(token, claims -> claims.get("email", String.class));
-    }
 
     @Override
     public void addTokenCookies(TokenDto tokenDto) {
@@ -166,19 +180,40 @@ public class JwtServiceImplement implements JwtService {
     }
 
 
-    private String createToken(Map<String, Object> claims, String subject, long expiration) {
+    private String createToken(Map<String, Object> claims, UserEntity subject, long expiration) {
+        Map<String, Object> headers = new HashMap<>();
+        headers.put("typ", "jwt");
+        headers.put("alg", "HS256");
+        headers.put("kid", kid);
+
+        claims.put("username", subject.getUsername());
+        claims.put("email", subject.getEmail());
+        claims.put("firstName", subject.getFirstName());
+        claims.put("lastName", subject.getLastName());
+        claims.put("userId", subject.getUserId());
+
         return Jwts.builder()
+                .setHeader(headers)
                 .setClaims(claims)
-                .setSubject(subject)
+                .setSubject(subject.getUsername()) // Keep subject as username
                 .setIssuedAt(new Date(System.currentTimeMillis()))
                 .setExpiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
-
     private Key getSigningKey() {
         byte[] keyBytes = Decoders.BASE64.decode(secretKey);
         return Keys.hmacShaKeyFor(keyBytes);
+    }
+
+    @Override
+    public String getEmailFromToken(String token) {
+        return extractClaim(token, claims -> claims.get("email", String.class));
+    }
+
+    @Override
+    public String getUsernameFromToken(String token) {
+        return extractClaim(token, Claims::getSubject);
     }
 
     private <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
@@ -194,14 +229,16 @@ public class JwtServiceImplement implements JwtService {
                 .getBody();
     }
 
+    private Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+
+
     private boolean isTokenExpired(String token) {
         final Date expiration = extractExpiration(token);
         return expiration.before(new Date());
     }
 
-    private Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
-    }
 
     private void addCookie(String name, String value, int maxAgeSecs) {
         HttpServletResponse response = getResponse();
@@ -230,5 +267,36 @@ public class JwtServiceImplement implements JwtService {
         assert attributes != null;
 
         return attributes.getRequest();
+    }
+
+    public Optional<TokenDto> getTokenFromCookies() {
+        HttpServletRequest request = getRequest();
+
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return Optional.empty();
+        }
+
+        String accessToken = null;
+        String refreshToken = null;
+
+        for (Cookie cookie : cookies) {
+            if (accessTokenCookieName.equals(cookie.getName())) {
+                accessToken = cookie.getValue();
+            } else if (refreshTokenCookieName.equals(cookie.getName())) {
+                refreshToken = cookie.getValue();
+            }
+        }
+
+        if (accessToken != null) {
+            TokenDto tokenDto = TokenDto.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
+                    .build();
+
+            return Optional.ofNullable(tokenDto);
+        }
+
+        return Optional.empty();
     }
 }

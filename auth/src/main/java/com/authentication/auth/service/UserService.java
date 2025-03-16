@@ -1,6 +1,7 @@
 package com.authentication.auth.service;
 
 import com.authentication.auth.dto.CreateUserDTO;
+import com.authentication.auth.dto.LoginCredentialDto;
 import com.authentication.auth.entity.user.UserEntity;
 
 public interface UserService {
@@ -13,4 +14,8 @@ public interface UserService {
     public UserEntity getUserByEmail(String email);
     public UserEntity getUserByUsername(String username);
     public UserEntity getUsers();
+
+    public String loginCredentials(LoginCredentialDto payload);
+    public void logout();
+
 }
