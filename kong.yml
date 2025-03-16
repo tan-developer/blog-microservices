@@ -1,0 +1,19 @@
+_format_version: "2.1"
+_transform: true
+
+services:
+  - name: example-service
+    url: http://example.com
+    routes:
+      - name: example-route
+        paths:
+          - /example
+        strip_path: true
+
+  - name: mock-service
+    url: http://mockbin.org
+    routes:
+      - name: mock-route
+        paths:
+          - /mock
+        strip_path: true
